@@ -568,17 +568,24 @@ body {
   filter: brightness(1.06);
 }
 
+#nl-badge-frame,
+#nl-hud-frame {
+  display: none !important;
+  visibility: hidden !important;
+  pointer-events: none !important;
+}
+
 /* Confirmation modal */
 .modal-backdrop {
   position: fixed;
   inset: 0;
-  z-index: 60;
+  z-index: 2147483647;
   background: rgba(6, 10, 22, 0.72);
   backdrop-filter: blur(6px);
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 20px;
+  padding: 16px 14px 28px;
 }
 
 .modal {
@@ -613,10 +620,11 @@ body {
 
 .modal--settings {
   max-width: 580px;
-  max-height: calc(100vh - 36px);
+  max-height: calc(100vh - 56px);
+  max-height: calc(100dvh - 56px);
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: 14px;
   overflow: hidden;
 }
 
@@ -779,7 +787,7 @@ body {
   left: 50%;
   bottom: 22px;
   transform: translateX(-50%);
-  z-index: 50;
+  z-index: 2147483646;
   display: inline-flex;
   align-items: center;
   gap: 9px;
