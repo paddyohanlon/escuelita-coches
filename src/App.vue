@@ -21,7 +21,7 @@
       </div>
     </header>
 
-    <!-- Identity & Push Notifications Bar -->
+    <!-- Identity, Settings & Push Notifications Bar -->
     <section class="identity-bar">
       <div class="identity-bar__who">
         <span class="identity-label">Soy:</span>
@@ -39,17 +39,30 @@
         </div>
       </div>
 
-      <button
-        type="button"
-        class="btn btn--sm"
-        :class="pushSubscribed ? 'btn--push-on' : 'btn--ghost'"
-        :disabled="pushBusy"
-        @click="togglePush"
-      >
-        <span v-if="pushBusy">Activando…</span>
-        <span v-else-if="pushSubscribed">🔔 Avisos activos ({{ currentActor }})</span>
-        <span v-else>🔕 Activar avisos</span>
-      </button>
+      <div class="identity-bar__actions">
+        <button
+          v-if="currentActor"
+          type="button"
+          class="btn btn--sm btn--ghost btn--settings"
+          :title="`Ajustes de ${currentActor}`"
+          @click="openSettingsModal"
+        >
+          <span class="cog-icon" aria-hidden="true">⚙️</span>
+          <span>Ajustes ({{ currentActor }})</span>
+        </button>
+
+        <button
+          type="button"
+          class="btn btn--sm"
+          :class="pushSubscribed ? 'btn--push-on' : 'btn--ghost'"
+          :disabled="pushBusy"
+          @click="togglePush"
+        >
+          <span v-if="pushBusy">Activando…</span>
+          <span v-else-if="pushSubscribed">🔔 Avisos activos ({{ currentActor }})</span>
+          <span v-else>🔕 Activar avisos</span>
+        </button>
+      </div>
     </section>
 
     <main class="main">
@@ -131,14 +144,23 @@
                       :key="p.id"
                       type="button"
                       class="pill"
+                      :disabled="isUnavailable(p.id, i, 'dropOff') && day.dropOff.person !== p.id"
                       :class="{
                         'pill--active': day.dropOff.person === p.id,
+                        'pill--unavailable': isUnavailable(p.id, i, 'dropOff'),
+                        'pill--default': isDefaultFor(p.id, i, 'dropOff'),
                         'pill--cf': p.group === 'CF',
                         'pill--lp': p.group === 'LP',
                       }"
+                      :title="pillTitle(p.id, i, 'dropOff')"
                       @click="selectDropPerson(w.key, i, p.id)"
                     >
-                      {{ p.label }}
+                      <span>{{ p.label }}</span>
+                      <span
+                        v-if="isDefaultFor(p.id, i, 'dropOff')"
+                        class="pill__star"
+                        aria-hidden="true"
+                      >★</span>
                     </button>
                   </div>
                   <div class="time-row" v-if="day.dropOff.person">
@@ -167,14 +189,23 @@
                       :key="p.id"
                       type="button"
                       class="pill pill--pick"
+                      :disabled="isUnavailable(p.id, i, 'pickUp') && day.pickUp.person !== p.id"
                       :class="{
                         'pill--active': day.pickUp.person === p.id,
+                        'pill--unavailable': isUnavailable(p.id, i, 'pickUp'),
+                        'pill--default': isDefaultFor(p.id, i, 'pickUp'),
                         'pill--cf': p.group === 'CF',
                         'pill--lp': p.group === 'LP',
                       }"
+                      :title="pillTitle(p.id, i, 'pickUp')"
                       @click="selectPickupPerson(w.key, i, p.id)"
                     >
-                      {{ p.label }}
+                      <span>{{ p.label }}</span>
+                      <span
+                        v-if="isDefaultFor(p.id, i, 'pickUp')"
+                        class="pill__star"
+                        aria-hidden="true"
+                      >★</span>
                     </button>
                   </div>
                 </div>
@@ -190,6 +221,191 @@
         <span>Horas 08:30–08:50</span>
       </footer>
     </main>
+
+    <!-- User Settings modal -->
+    <Transition name="fade">
+      <div
+        v-if="showSettingsModal && currentActor"
+        class="modal-backdrop"
+        @click.self="closeSettingsModal"
+      >
+        <div class="modal modal--settings" role="dialog" aria-modal="true">
+          <header class="settings-modal__header">
+            <div>
+              <h3 class="modal__title">⚙️ Ajustes de {{ currentActor }}</h3>
+              <p class="settings-modal__subtitle">
+                Marca cuándo no estás disponible o qué turnos haces siempre por defecto (★).
+                Los turnos por defecto se pueden cambiar cualquier semana.
+              </p>
+            </div>
+            <button
+              type="button"
+              class="btn btn--ghost btn--sm"
+              aria-label="Cerrar"
+              @click="closeSettingsModal"
+            >
+              ✕
+            </button>
+          </header>
+
+          <div class="settings-sections">
+            <!-- Morning Drop-off Settings -->
+            <section class="settings-block">
+              <div class="settings-block__head">
+                <div class="settings-block__title">
+                  <span>🚗</span>
+                  <span>Llevar al cole (mañanas)</span>
+                </div>
+                <button
+                  type="button"
+                  class="btn btn--ghost btn--xs"
+                  @click="toggleAllSlotUnavailable('dropOff')"
+                >
+                  {{ isAllSlotUnavailable('dropOff') ? 'Habilitar todos' : 'Nunca disponible' }}
+                </button>
+              </div>
+
+              <div class="settings-days">
+                <div
+                  v-for="(dayName, di) in dayNames"
+                  :key="`drop-${di}`"
+                  class="settings-day-row"
+                >
+                  <div class="settings-day-label">
+                    <span class="settings-day-name">{{ dayName }}</span>
+                    <span
+                      v-if="otherDefaultPerson(di, 'dropOff')"
+                      class="settings-other-default"
+                    >
+                      ★ {{ otherDefaultPerson(di, 'dropOff') }}
+                    </span>
+                  </div>
+
+                  <div class="settings-day-controls">
+                    <div class="seg-group" role="group" :aria-label="`Llevar ${dayName}`">
+                      <button
+                        type="button"
+                        class="seg-btn"
+                        :class="{ 'seg-btn--active': draftSettings[di].dropOff.state === 'available' }"
+                        @click="setDraftState(di, 'dropOff', 'available')"
+                      >
+                        Disponible
+                      </button>
+                      <button
+                        type="button"
+                        class="seg-btn seg-btn--unavail"
+                        :class="{ 'seg-btn--active': draftSettings[di].dropOff.state === 'unavailable' }"
+                        @click="setDraftState(di, 'dropOff', 'unavailable')"
+                      >
+                        No disp.
+                      </button>
+                      <button
+                        type="button"
+                        class="seg-btn seg-btn--default"
+                        :class="{ 'seg-btn--active': draftSettings[di].dropOff.state === 'default' }"
+                        @click="setDraftState(di, 'dropOff', 'default')"
+                      >
+                        ★ Por defecto
+                      </button>
+                    </div>
+
+                    <select
+                      v-if="draftSettings[di].dropOff.state === 'default'"
+                      class="time-select time-select--sm"
+                      :value="draftSettings[di].dropOff.time"
+                      @change="setDraftDropTime(di, $event)"
+                    >
+                      <option v-for="t in times" :key="t" :value="t">{{ t }}</option>
+                    </select>
+                  </div>
+                </div>
+              </div>
+            </section>
+
+            <!-- Afternoon Pick-up Settings -->
+            <section class="settings-block">
+              <div class="settings-block__head">
+                <div class="settings-block__title">
+                  <span>🏠</span>
+                  <span>Recoger del cole (tardes)</span>
+                </div>
+                <button
+                  type="button"
+                  class="btn btn--ghost btn--xs"
+                  @click="toggleAllSlotUnavailable('pickUp')"
+                >
+                  {{ isAllSlotUnavailable('pickUp') ? 'Habilitar todos' : 'Nunca disponible' }}
+                </button>
+              </div>
+
+              <div class="settings-days">
+                <div
+                  v-for="(dayName, di) in dayNames"
+                  :key="`pick-${di}`"
+                  class="settings-day-row"
+                >
+                  <div class="settings-day-label">
+                    <span class="settings-day-name">{{ dayName }}</span>
+                    <span
+                      v-if="otherDefaultPerson(di, 'pickUp')"
+                      class="settings-other-default"
+                    >
+                      ★ {{ otherDefaultPerson(di, 'pickUp') }}
+                    </span>
+                  </div>
+
+                  <div class="settings-day-controls">
+                    <div class="seg-group" role="group" :aria-label="`Recoger ${dayName}`">
+                      <button
+                        type="button"
+                        class="seg-btn"
+                        :class="{ 'seg-btn--active': draftSettings[di].pickUp.state === 'available' }"
+                        @click="setDraftState(di, 'pickUp', 'available')"
+                      >
+                        Disponible
+                      </button>
+                      <button
+                        type="button"
+                        class="seg-btn seg-btn--unavail"
+                        :class="{ 'seg-btn--active': draftSettings[di].pickUp.state === 'unavailable' }"
+                        @click="setDraftState(di, 'pickUp', 'unavailable')"
+                      >
+                        No disp.
+                      </button>
+                      <button
+                        type="button"
+                        class="seg-btn seg-btn--default"
+                        :class="{ 'seg-btn--active': draftSettings[di].pickUp.state === 'default' }"
+                        @click="setDraftState(di, 'pickUp', 'default')"
+                      >
+                        ★ Por defecto
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </section>
+          </div>
+
+          <div class="modal__actions">
+            <button
+              type="button"
+              class="btn btn--ghost"
+              @click="closeSettingsModal"
+            >
+              Cancelar
+            </button>
+            <button
+              type="button"
+              class="btn btn--primary"
+              @click="saveUserSettings"
+            >
+              Guardar ajustes
+            </button>
+          </div>
+        </div>
+      </div>
+    </Transition>
 
     <!-- Confirmation modal -->
     <Transition name="fade">
@@ -239,12 +455,25 @@
 
 <script setup lang="ts">
 import { computed, nextTick, onMounted, ref } from 'vue'
-import type { DayData, Person, Time } from './types'
+import type {
+  DayData,
+  Person,
+  PersonDaySetting,
+  SlotRuleState,
+  Time,
+  UserSettingsMap,
+} from './types'
 import {
   PEOPLE,
   TIMES,
+  applyDefaultsToDays,
+  defaultDaysFromSettings,
   defaultTimeFor,
   emptyDays,
+  emptyPersonSettings,
+  getDefaultDropOff,
+  getDefaultPickUp,
+  isPersonUnavailable,
 } from './types'
 import {
   addDays,
@@ -262,6 +491,7 @@ import {
 } from './push'
 
 const ACTOR_KEY = 'escuelita-actor'
+const dayNames = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes']
 
 const people = PEOPLE
 const times = TIMES
@@ -270,6 +500,10 @@ const currentActor = ref<Person | null>(null)
 const pushSubscribed = ref(false)
 const pushBusy = ref(false)
 
+const userSettings = ref<UserSettingsMap>({})
+const showSettingsModal = ref(false)
+const draftSettings = ref<PersonDaySetting[]>(emptyPersonSettings('Cris'))
+
 try {
   const savedActor = localStorage.getItem(ACTOR_KEY) as Person | null
   if (savedActor && people.some((p) => p.id === savedActor)) {
@@ -277,6 +511,174 @@ try {
   }
 } catch {
   /* ignore */
+}
+
+function isUnavailable(
+  person: Person,
+  dayIndex: number,
+  slot: 'dropOff' | 'pickUp',
+): boolean {
+  return isPersonUnavailable(userSettings.value, person, dayIndex, slot)
+}
+
+function isDefaultFor(
+  person: Person,
+  dayIndex: number,
+  slot: 'dropOff' | 'pickUp',
+): boolean {
+  return userSettings.value[person]?.[dayIndex]?.[slot]?.state === 'default'
+}
+
+function pillTitle(
+  person: Person,
+  dayIndex: number,
+  slot: 'dropOff' | 'pickUp',
+): string {
+  if (isUnavailable(person, dayIndex, slot)) {
+    return `${person} no está disponible en este turno`
+  }
+  if (isDefaultFor(person, dayIndex, slot)) {
+    return `${person} (por defecto en este turno)`
+  }
+  return person
+}
+
+function openSettingsModal() {
+  if (!currentActor.value) return
+  const actor = currentActor.value
+  const existing = userSettings.value[actor] ?? emptyPersonSettings(actor)
+  draftSettings.value = existing.map((d, i) => ({
+    dropOff: {
+      state: d.dropOff.state,
+      time: d.dropOff.time ?? defaultTimeFor(actor, i),
+    },
+    pickUp: {
+      state: d.pickUp.state,
+    },
+  }))
+  showSettingsModal.value = true
+}
+
+function closeSettingsModal() {
+  showSettingsModal.value = false
+}
+
+function setDraftState(
+  dayIndex: number,
+  slot: 'dropOff' | 'pickUp',
+  state: SlotRuleState,
+) {
+  if (slot === 'dropOff') {
+    const actor = currentActor.value ?? 'Cris'
+    draftSettings.value[dayIndex].dropOff.state = state
+    if (state === 'default' && !draftSettings.value[dayIndex].dropOff.time) {
+      draftSettings.value[dayIndex].dropOff.time = defaultTimeFor(actor, dayIndex)
+    }
+  } else {
+    draftSettings.value[dayIndex].pickUp.state = state
+  }
+}
+
+function setDraftDropTime(dayIndex: number, ev: Event) {
+  const selectEl = ev.target as HTMLSelectElement
+  draftSettings.value[dayIndex].dropOff.time = selectEl.value as Time
+}
+
+function isAllSlotUnavailable(slot: 'dropOff' | 'pickUp'): boolean {
+  return draftSettings.value.every((d) => d[slot].state === 'unavailable')
+}
+
+function toggleAllSlotUnavailable(slot: 'dropOff' | 'pickUp') {
+  const target: SlotRuleState = isAllSlotUnavailable(slot)
+    ? 'available'
+    : 'unavailable'
+  for (let i = 0; i < draftSettings.value.length; i++) {
+    setDraftState(i, slot, target)
+  }
+}
+
+function otherDefaultPerson(
+  dayIndex: number,
+  slot: 'dropOff' | 'pickUp',
+): Person | null {
+  const actor = currentActor.value
+  if (slot === 'dropOff') {
+    const def = getDefaultDropOff(userSettings.value, dayIndex)
+    return def && def.person !== actor ? def.person : null
+  }
+  const def = getDefaultPickUp(userSettings.value, dayIndex)
+  return def && def !== actor ? def : null
+}
+
+function saveUserSettings() {
+  const actor = currentActor.value
+  if (!actor) return
+
+  const nextSettings: UserSettingsMap = {}
+  for (const p of people) {
+    const src = userSettings.value[p.id] ?? emptyPersonSettings(p.id)
+    nextSettings[p.id] = src.map((d, i) => ({
+      dropOff: {
+        state: d.dropOff.state,
+        time: d.dropOff.time ?? defaultTimeFor(p.id, i),
+      },
+      pickUp: { state: d.pickUp.state },
+    }))
+  }
+
+  nextSettings[actor] = draftSettings.value.map((d, i) => ({
+    dropOff: {
+      state: d.dropOff.state,
+      time: d.dropOff.time ?? defaultTimeFor(actor, i),
+    },
+    pickUp: { state: d.pickUp.state },
+  }))
+
+  // Ensure at most one person has 'default' per day + slot
+  for (let i = 0; i < 5; i++) {
+    if (nextSettings[actor]![i].dropOff.state === 'default') {
+      for (const p of people) {
+        if (p.id !== actor && nextSettings[p.id]?.[i]?.dropOff.state === 'default') {
+          nextSettings[p.id]![i].dropOff.state = 'available'
+        }
+      }
+    }
+    if (nextSettings[actor]![i].pickUp.state === 'default') {
+      for (const p of people) {
+        if (p.id !== actor && nextSettings[p.id]?.[i]?.pickUp.state === 'default') {
+          nextSettings[p.id]![i].pickUp.state = 'available'
+        }
+      }
+    }
+  }
+
+  userSettings.value = nextSettings
+
+  // Apply defaults / unavailability to active weeks for non-past days
+  for (const w of weeksMeta) {
+    const days = getWeekDays(w.key)
+    for (let i = 0; i < 5; i++) {
+      if (w.days[i].isPast) continue
+
+      const actorDropState = nextSettings[actor]![i].dropOff.state
+      if (actorDropState === 'unavailable' && days[i].dropOff.person === actor) {
+        days[i].dropOff = { person: null, time: null, overridden: false }
+      } else if (actorDropState === 'default' && days[i].dropOff.person === null) {
+        days[i].dropOff.overridden = false
+      }
+
+      const actorPickState = nextSettings[actor]![i].pickUp.state
+      if (actorPickState === 'unavailable' && days[i].pickUp.person === actor) {
+        days[i].pickUp = { person: null, overridden: false }
+      } else if (actorPickState === 'default' && days[i].pickUp.person === null) {
+        days[i].pickUp.overridden = false
+      }
+    }
+    schedule.value[w.key] = applyDefaultsToDays(days, userSettings.value)
+  }
+
+  showSettingsModal.value = false
+  scheduleSave(`Ajustes guardados · ${actor}`)
 }
 
 async function selectActor(person: Person) {
@@ -366,7 +768,7 @@ const schedule = ref<Record<string, DayData[]>>({
 
 function getWeekDays(key: string): DayData[] {
   if (!schedule.value[key]) {
-    schedule.value[key] = emptyDays()
+    schedule.value[key] = defaultDaysFromSettings(userSettings.value)
   }
   return schedule.value[key]
 }
@@ -454,16 +856,24 @@ function scheduleSave(noticeText: string) {
   if (saveTimer) clearTimeout(saveTimer)
   saving.value = true
   saveTimer = setTimeout(async () => {
-    await saveSchedule(activePayload(), currentActor.value)
+    await saveSchedule(activePayload(), userSettings.value, currentActor.value)
     saving.value = false
     savedAt.value = Date.now()
     showToast(noticeText)
   }, 250)
 }
 
+function preferredDropTimeFor(person: Person, dayIndex: number): Time {
+  return (
+    userSettings.value[person]?.[dayIndex]?.dropOff.time ??
+    defaultTimeFor(person, dayIndex)
+  )
+}
+
 async function selectDropPerson(weekKey: string, i: number, p: Person) {
   const days = getWeekDays(weekKey)
   const current = days[i].dropOff.person
+  if (isUnavailable(p, i, 'dropOff') && current !== p) return
   const dayStr = getDayTitle(weekKey, i)
 
   if (current === p) {
@@ -472,18 +882,16 @@ async function selectDropPerson(weekKey: string, i: number, p: Person) {
       `¿Quitar a ${p} de llevar al cole el ${dayStr}?`,
     )
     if (!ok) return
-    days[i].dropOff.person = null
-    days[i].dropOff.time = null
+    days[i].dropOff = { person: null, time: null, overridden: true }
     scheduleSave(`Guardado · ${dayStr}: sin asignar (llevar)`)
   } else {
-    const nextTime = defaultTimeFor(p, i)
+    const nextTime = preferredDropTimeFor(p, i)
     const msg = current
       ? `¿Cambiar de ${current} a ${p} (${nextTime}) para llevar al cole el ${dayStr}?`
       : `¿Asignar a ${p} (${nextTime}) para llevar al cole el ${dayStr}?`
     const ok = await askConfirm('Confirmar cambio', msg)
     if (!ok) return
-    days[i].dropOff.person = p
-    days[i].dropOff.time = nextTime
+    days[i].dropOff = { person: p, time: nextTime, overridden: true }
     scheduleSave(`Guardado · ${dayStr}: ${p} lleva (${nextTime})`)
   }
 }
@@ -506,12 +914,14 @@ async function onDropTimeChange(weekKey: string, i: number, ev: Event) {
     return
   }
   days[i].dropOff.time = nextTime
+  days[i].dropOff.overridden = true
   scheduleSave(`Guardado · ${dayStr}: ${person} a las ${nextTime}`)
 }
 
 async function selectPickupPerson(weekKey: string, i: number, p: Person) {
   const days = getWeekDays(weekKey)
   const current = days[i].pickUp.person
+  if (isUnavailable(p, i, 'pickUp') && current !== p) return
   const dayStr = getDayTitle(weekKey, i)
 
   if (current === p) {
@@ -520,7 +930,7 @@ async function selectPickupPerson(weekKey: string, i: number, p: Person) {
       `¿Quitar a ${p} de recoger del cole el ${dayStr}?`,
     )
     if (!ok) return
-    days[i].pickUp.person = null
+    days[i].pickUp = { person: null, overridden: true }
     scheduleSave(`Guardado · ${dayStr}: sin asignar (recoger)`)
   } else {
     const msg = current
@@ -528,7 +938,7 @@ async function selectPickupPerson(weekKey: string, i: number, p: Person) {
       : `¿Asignar a ${p} para recoger del cole el ${dayStr}?`
     const ok = await askConfirm('Confirmar cambio', msg)
     if (!ok) return
-    days[i].pickUp.person = p
+    days[i].pickUp = { person: p, overridden: true }
     scheduleSave(`Guardado · ${dayStr}: ${p} recoge`)
   }
 }
@@ -536,24 +946,25 @@ async function selectPickupPerson(weekKey: string, i: number, p: Person) {
 async function resetOneWeek(weekKey: string, label: string) {
   const ok = await askConfirm(
     'Reiniciar semana',
-    `¿Seguro que quieres borrar todas las asignaciones de ${label.toLowerCase()}?`,
+    `¿Seguro que quieres borrar las asignaciones manuales de ${label.toLowerCase()} y volver a los valores por defecto?`,
   )
   if (!ok) return
-  schedule.value[weekKey] = emptyDays()
+  schedule.value[weekKey] = defaultDaysFromSettings(userSettings.value)
   scheduleSave(`Semana reiniciada · ${label}`)
 }
 
 async function resetAll() {
   const ok = await askConfirm(
     'Reiniciar todo',
-    '¿Seguro que quieres borrar las asignaciones de las dos semanas?',
+    '¿Seguro que quieres reiniciar las dos semanas a sus valores por defecto?',
   )
   if (!ok) return
   schedule.value = {
-    [weeksMeta[0].key]: emptyDays(),
-    [weeksMeta[1].key]: emptyDays(),
+    [weeksMeta[0].key]: defaultDaysFromSettings(userSettings.value),
+    [weeksMeta[1].key]: defaultDaysFromSettings(userSettings.value),
   }
-  await resetSchedule()
+  await resetSchedule(userSettings.value)
+  await saveSchedule(activePayload(), userSettings.value, currentActor.value)
   savedAt.value = Date.now()
   showToast('Guardado · Se han reiniciado las dos semanas')
 }
@@ -579,9 +990,13 @@ onMounted(async () => {
   }
 
   if (loaded) {
+    userSettings.value = loaded.settings ?? {}
     for (const w of weeksMeta) {
-      if (Array.isArray(loaded[w.key]) && loaded[w.key].length === 5) {
-        schedule.value[w.key] = loaded[w.key]
+      const rawWeek = loaded.weeks[w.key]
+      if (Array.isArray(rawWeek) && rawWeek.length === 5) {
+        schedule.value[w.key] = applyDefaultsToDays(rawWeek, userSettings.value)
+      } else {
+        schedule.value[w.key] = defaultDaysFromSettings(userSettings.value)
       }
     }
   }

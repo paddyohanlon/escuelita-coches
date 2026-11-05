@@ -17,6 +17,7 @@ interface DaySlotData {
 
 interface StoredPayload {
   weeks?: Record<string, DaySlotData[]>
+  settings?: Record<string, unknown>
 }
 
 function formatDayName(mondayIso: string, dayIndex: number): string {
@@ -125,7 +126,10 @@ export default async (req: Request, _context: Context): Promise<Response> => {
         prev = null
       }
 
-      await store.setJSON(KEY, { weeks: body.weeks })
+      await store.setJSON(KEY, {
+        weeks: body.weeks,
+        settings: body.settings ?? prev?.settings ?? {},
+      })
 
       await notifyDiffs(prev?.weeks, body.weeks, body.actor ?? null)
 
@@ -137,7 +141,17 @@ export default async (req: Request, _context: Context): Promise<Response> => {
 
   if (req.method === 'DELETE') {
     try {
-      await store.delete(KEY)
+      let prev: StoredPayload | null = null
+      try {
+        prev = (await store.get(KEY, { type: 'json' })) as StoredPayload | null
+      } catch {
+        prev = null
+      }
+      if (prev?.settings && Object.keys(prev.settings).length > 0) {
+        await store.setJSON(KEY, { weeks: {}, settings: prev.settings })
+      } else {
+        await store.delete(KEY)
+      }
       return Response.json({ ok: true })
     } catch {
       return new Response('Error', { status: 500 })
