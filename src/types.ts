@@ -1,4 +1,4 @@
-export type Person = 'Cris' | 'Fran' | 'Paddy' | 'Lidiya' | 'Jo'
+export type Person = 'Cris' | 'Fran' | 'Paddy' | 'Lidiya' | 'Jo' | 'Cuke'
 export type CoupleGroup = 'CF' | 'LP'
 export type Time = '08:30' | '08:35' | '08:40' | '08:45' | '08:50'
 
@@ -35,6 +35,7 @@ export const PEOPLE: { id: Person; label: string; group: CoupleGroup }[] = [
   { id: 'Lidiya', label: 'Lidiya', group: 'LP' },
   { id: 'Paddy', label: 'Paddy', group: 'LP' },
   { id: 'Jo', label: 'Jo', group: 'LP' },
+  { id: 'Cuke', label: 'Cuke', group: 'LP' },
 ]
 
 export const CF_DEFAULT_TIMES: Record<number, Time> = {

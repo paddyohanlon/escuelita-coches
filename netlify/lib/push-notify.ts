@@ -4,8 +4,8 @@ import webpush, { type PushSubscription } from 'web-push'
 export const STORE_NAME = 'escuelita'
 export const SUBS_KEY = 'push-subs'
 
-export type Person = 'Cris' | 'Fran' | 'Paddy' | 'Lidiya' | 'Jo'
-export const ALL_PEOPLE: Person[] = ['Cris', 'Fran', 'Lidiya', 'Paddy', 'Jo']
+export type Person = 'Cris' | 'Fran' | 'Paddy' | 'Lidiya' | 'Jo' | 'Cuke'
+export const ALL_PEOPLE: Person[] = ['Cris', 'Fran', 'Lidiya', 'Paddy', 'Jo', 'Cuke']
 
 export type SubsByPerson = Partial<Record<Person, PushSubscription[]>>
 
