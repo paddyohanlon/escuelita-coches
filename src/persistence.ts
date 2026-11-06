@@ -4,10 +4,18 @@ import type {
   PersonDaySetting,
   SlotRuleState,
   StoredSchedule,
+  TheoHouse,
   Time,
   UserSettingsMap,
 } from './types'
-import { defaultTimeFor, emptyDay, emptyPersonSettings, PEOPLE, TIMES } from './types'
+import {
+  DEFAULT_THEO_HOUSE,
+  defaultTimeFor,
+  emptyDay,
+  emptyPersonSettings,
+  PEOPLE,
+  TIMES,
+} from './types'
 
 const ENDPOINT = '/.netlify/functions/week'
 const LS_KEY = 'escuelita-week'
@@ -37,6 +45,10 @@ function sanitizeState(val: unknown): SlotRuleState {
   return 'available'
 }
 
+function sanitizeTheoHouse(val: unknown): TheoHouse {
+  return val === 'Cuke' ? 'Cuke' : DEFAULT_THEO_HOUSE
+}
+
 function sanitizeDays(rawDays: unknown): DayData[] | null {
   if (!Array.isArray(rawDays) || rawDays.length !== 5) return null
   return rawDays.map((d) => {
@@ -45,14 +57,25 @@ function sanitizeDays(rawDays: unknown): DayData[] | null {
     const pick = (d as Record<string, unknown>).pickUp as Record<string, unknown> | undefined
     const dropPerson = sanitizePerson(drop?.person)
     const dropTime = dropPerson ? sanitizeTime(drop?.time) : null
+    const dropTheoHouse = sanitizeTheoHouse(drop?.theoHouse)
     const dropOverridden =
       typeof drop?.overridden === 'boolean' ? drop.overridden : dropPerson !== null
     const pickPerson = sanitizePerson(pick?.person)
+    const pickTheoHouse = sanitizeTheoHouse(pick?.theoHouse)
     const pickOverridden =
       typeof pick?.overridden === 'boolean' ? pick.overridden : pickPerson !== null
     return {
-      dropOff: { person: dropPerson, time: dropTime, overridden: dropOverridden },
-      pickUp: { person: pickPerson, overridden: pickOverridden },
+      dropOff: {
+        person: dropPerson,
+        time: dropTime,
+        theoHouse: dropTheoHouse,
+        overridden: dropOverridden,
+      },
+      pickUp: {
+        person: pickPerson,
+        theoHouse: pickTheoHouse,
+        overridden: pickOverridden,
+      },
     }
   })
 }
@@ -71,7 +94,10 @@ function sanitizePersonDays(person: Person, raw: unknown): PersonDaySetting[] {
     const drop = (d as Record<string, unknown>).dropOff as Record<string, unknown> | undefined
     const pick = (d as Record<string, unknown>).pickUp as Record<string, unknown> | undefined
     const dropState = sanitizeState(drop?.state)
-    const dropTime = sanitizeTime(drop?.time) ?? defaultTimeFor(person, i)
+    const dropTime =
+      dropState === 'default'
+        ? sanitizeTime(drop?.time) ?? defaultTimeFor(person, i)
+        : defaultTimeFor(person, i)
     const pickState = sanitizeState(pick?.state)
     return {
       dropOff: { state: dropState, time: dropTime },

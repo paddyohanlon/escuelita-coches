@@ -1,6 +1,10 @@
 export type Person = 'Cris' | 'Fran' | 'Paddy' | 'Lidiya' | 'Jo' | 'Cuke'
 export type CoupleGroup = 'CF' | 'LP'
 export type Time = '08:30' | '08:35' | '08:40' | '08:45' | '08:50'
+export type TheoHouse = 'Jo' | 'Cuke'
+
+export const DEFAULT_THEO_HOUSE: TheoHouse = 'Jo'
+export const THEO_HOUSES: TheoHouse[] = ['Jo', 'Cuke']
 
 export type SlotRuleState = 'available' | 'unavailable' | 'default'
 
@@ -23,11 +27,13 @@ export type UserSettingsMap = Partial<Record<Person, PersonDaySetting[]>>
 export interface DropOff {
   person: Person | null
   time: Time | null
+  theoHouse?: TheoHouse
   overridden?: boolean
 }
 
 export interface PickUp {
   person: Person | null
+  theoHouse?: TheoHouse
   overridden?: boolean
 }
 
@@ -69,19 +75,48 @@ export const CF_DEFAULT_TIMES: Record<number, Time> = {
 }
 
 export const LP_DEFAULT_TIME: Time = '08:40'
+export const JO_DEFAULT_TIME: Time = '08:45'
 
 export function groupForPerson(person: Person): CoupleGroup {
   return person === 'Cris' || person === 'Fran' ? 'CF' : 'LP'
 }
 
 export function defaultTimeFor(person: Person, dayIndex: number): Time {
+  if (person === 'Jo') return JO_DEFAULT_TIME
   return groupForPerson(person) === 'CF' ? CF_DEFAULT_TIMES[dayIndex] : LP_DEFAULT_TIME
+}
+
+export function addMinutesToTime(time: string, mins: number): string {
+  const [h, m] = time.split(':').map(Number)
+  if (isNaN(h) || isNaN(m)) return time
+  const total = h * 60 + m + mins
+  const hh = String(Math.floor(total / 60) % 24).padStart(2, '0')
+  const mm = String(total % 60).padStart(2, '0')
+  return `${hh}:${mm}`
+}
+
+export function isBuildingPerson(person: Person | null): boolean {
+  return (
+    person === 'Cris' ||
+    person === 'Fran' ||
+    person === 'Lidiya' ||
+    person === 'Paddy'
+  )
 }
 
 export function emptyDay(): DayData {
   return {
-    dropOff: { person: null, time: null, overridden: false },
-    pickUp: { person: null, overridden: false },
+    dropOff: {
+      person: null,
+      time: null,
+      theoHouse: DEFAULT_THEO_HOUSE,
+      overridden: false,
+    },
+    pickUp: {
+      person: null,
+      theoHouse: DEFAULT_THEO_HOUSE,
+      overridden: false,
+    },
   }
 }
 
@@ -146,18 +181,23 @@ export function applyDefaultsToDays(
     const defDrop = getDefaultDropOff(settings, i)
     const defPick = getDefaultPickUp(settings, i)
 
+    const dropTheoHouse: TheoHouse = d.dropOff.theoHouse ?? DEFAULT_THEO_HOUSE
+    const pickTheoHouse: TheoHouse = d.pickUp.theoHouse ?? DEFAULT_THEO_HOUSE
+
     const dropOff: DropOff = d.dropOff.overridden
-      ? { ...d.dropOff }
+      ? { ...d.dropOff, theoHouse: dropTheoHouse }
       : {
           person: defDrop ? defDrop.person : null,
           time: defDrop ? defDrop.time : null,
+          theoHouse: dropTheoHouse,
           overridden: false,
         }
 
     const pickUp: PickUp = d.pickUp.overridden
-      ? { ...d.pickUp }
+      ? { ...d.pickUp, theoHouse: pickTheoHouse }
       : {
           person: defPick ?? null,
+          theoHouse: pickTheoHouse,
           overridden: false,
         }
 

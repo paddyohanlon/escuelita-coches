@@ -133,9 +133,24 @@
             <template v-if="!isDayCollapsed(wi, i)">
               <!-- Row 1: Morning drop-off -->
               <div class="slot slot--drop">
-                <div class="slot__label">
-                  <span class="row-icon">🚗</span>
-                  <span>Llevar al cole</span>
+                <div class="slot__head">
+                  <div class="slot__label">
+                    <span class="row-icon">🚗</span>
+                    <span>Llevar</span>
+                  </div>
+                  <div class="theo-toggle" role="group" aria-label="Casa de Theo por la mañana">
+                    <span class="theo-toggle__label">Theo:</span>
+                    <button
+                      v-for="h in theoHouses"
+                      :key="h"
+                      type="button"
+                      class="theo-btn"
+                      :class="{ 'theo-btn--active': (day.dropOff.theoHouse ?? 'Jo') === h }"
+                      @click="setTheoHouse(w.key, i, 'dropOff', h)"
+                    >
+                      {{ h }}
+                    </button>
+                  </div>
                 </div>
                 <div class="slot__controls">
                   <div class="people-grid">
@@ -164,7 +179,7 @@
                     </button>
                   </div>
                   <div class="time-row" v-if="day.dropOff.person">
-                    <label class="time-label">Hora</label>
+                    <label class="time-label">Abajo</label>
                     <select
                       class="time-select"
                       :value="day.dropOff.time"
@@ -172,15 +187,36 @@
                     >
                       <option v-for="t in times" :key="t" :value="t">{{ t }}</option>
                     </select>
+                    <span
+                      v-if="showJoDropTime(day)"
+                      class="jo-time"
+                    >
+                      Jo {{ addMinutesToTime(day.dropOff.time!, 10) }}
+                    </span>
                   </div>
                 </div>
               </div>
 
               <!-- Row 2: School pick-up -->
               <div class="slot slot--pickup">
-                <div class="slot__label">
-                  <span class="row-icon">🏠</span>
-                  <span>Recoger del cole</span>
+                <div class="slot__head">
+                  <div class="slot__label">
+                    <span class="row-icon">🏠</span>
+                    <span>Recoger</span>
+                  </div>
+                  <div class="theo-toggle" role="group" aria-label="Casa de Theo por la tarde">
+                    <span class="theo-toggle__label">Theo:</span>
+                    <button
+                      v-for="h in theoHouses"
+                      :key="h"
+                      type="button"
+                      class="theo-btn"
+                      :class="{ 'theo-btn--active': (day.pickUp.theoHouse ?? 'Jo') === h }"
+                      @click="setTheoHouse(w.key, i, 'pickUp', h)"
+                    >
+                      {{ h }}
+                    </button>
+                  </div>
                 </div>
                 <div class="slot__controls">
                   <div class="people-grid">
@@ -460,12 +496,16 @@ import type {
   Person,
   PersonDaySetting,
   SlotRuleState,
+  TheoHouse,
   Time,
   UserSettingsMap,
 } from './types'
 import {
+  DEFAULT_THEO_HOUSE,
   PEOPLE,
+  THEO_HOUSES,
   TIMES,
+  addMinutesToTime,
   applyDefaultsToDays,
   defaultDaysFromSettings,
   defaultTimeFor,
@@ -473,6 +513,7 @@ import {
   emptyPersonSettings,
   getDefaultDropOff,
   getDefaultPickUp,
+  isBuildingPerson,
   isPersonUnavailable,
 } from './types'
 import {
@@ -495,6 +536,7 @@ const dayNames = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes']
 
 const people = PEOPLE
 const times = TIMES
+const theoHouses = THEO_HOUSES
 
 const currentActor = ref<Person | null>(null)
 const pushSubscribed = ref(false)
@@ -662,14 +704,23 @@ function saveUserSettings() {
 
       const actorDropState = nextSettings[actor]![i].dropOff.state
       if (actorDropState === 'unavailable' && days[i].dropOff.person === actor) {
-        days[i].dropOff = { person: null, time: null, overridden: false }
+        days[i].dropOff = {
+          person: null,
+          time: null,
+          theoHouse: days[i].dropOff.theoHouse ?? DEFAULT_THEO_HOUSE,
+          overridden: false,
+        }
       } else if (actorDropState === 'default' && days[i].dropOff.person === null) {
         days[i].dropOff.overridden = false
       }
 
       const actorPickState = nextSettings[actor]![i].pickUp.state
       if (actorPickState === 'unavailable' && days[i].pickUp.person === actor) {
-        days[i].pickUp = { person: null, overridden: false }
+        days[i].pickUp = {
+          person: null,
+          theoHouse: days[i].pickUp.theoHouse ?? DEFAULT_THEO_HOUSE,
+          overridden: false,
+        }
       } else if (actorPickState === 'default' && days[i].pickUp.person === null) {
         days[i].pickUp.overridden = false
       }
@@ -870,9 +921,33 @@ function preferredDropTimeFor(person: Person, dayIndex: number): Time {
   )
 }
 
+function showJoDropTime(day: DayData): boolean {
+  return (
+    isBuildingPerson(day.dropOff.person) &&
+    Boolean(day.dropOff.time) &&
+    (day.dropOff.theoHouse ?? DEFAULT_THEO_HOUSE) === 'Jo'
+  )
+}
+
+function setTheoHouse(
+  weekKey: string,
+  i: number,
+  slot: 'dropOff' | 'pickUp',
+  house: TheoHouse,
+) {
+  const days = getWeekDays(weekKey)
+  const current = days[i][slot].theoHouse ?? DEFAULT_THEO_HOUSE
+  if (current === house) return
+  days[i][slot].theoHouse = house
+  const dayStr = getDayTitle(weekKey, i)
+  const slotStr = slot === 'dropOff' ? 'llevar' : 'recoger'
+  scheduleSave(`Guardado · ${dayStr}: Theo en casa de ${house} (${slotStr})`)
+}
+
 async function selectDropPerson(weekKey: string, i: number, p: Person) {
   const days = getWeekDays(weekKey)
   const current = days[i].dropOff.person
+  const theoHouse = days[i].dropOff.theoHouse ?? DEFAULT_THEO_HOUSE
   if (isUnavailable(p, i, 'dropOff') && current !== p) return
   const dayStr = getDayTitle(weekKey, i)
 
@@ -882,7 +957,7 @@ async function selectDropPerson(weekKey: string, i: number, p: Person) {
       `¿Quitar a ${p} de llevar al cole el ${dayStr}?`,
     )
     if (!ok) return
-    days[i].dropOff = { person: null, time: null, overridden: true }
+    days[i].dropOff = { person: null, time: null, theoHouse, overridden: true }
     scheduleSave(`Guardado · ${dayStr}: sin asignar (llevar)`)
   } else {
     const nextTime = preferredDropTimeFor(p, i)
@@ -891,7 +966,7 @@ async function selectDropPerson(weekKey: string, i: number, p: Person) {
       : `¿Asignar a ${p} (${nextTime}) para llevar al cole el ${dayStr}?`
     const ok = await askConfirm('Confirmar cambio', msg)
     if (!ok) return
-    days[i].dropOff = { person: p, time: nextTime, overridden: true }
+    days[i].dropOff = { person: p, time: nextTime, theoHouse, overridden: true }
     scheduleSave(`Guardado · ${dayStr}: ${p} lleva (${nextTime})`)
   }
 }
@@ -921,6 +996,7 @@ async function onDropTimeChange(weekKey: string, i: number, ev: Event) {
 async function selectPickupPerson(weekKey: string, i: number, p: Person) {
   const days = getWeekDays(weekKey)
   const current = days[i].pickUp.person
+  const theoHouse = days[i].pickUp.theoHouse ?? DEFAULT_THEO_HOUSE
   if (isUnavailable(p, i, 'pickUp') && current !== p) return
   const dayStr = getDayTitle(weekKey, i)
 
@@ -930,7 +1006,7 @@ async function selectPickupPerson(weekKey: string, i: number, p: Person) {
       `¿Quitar a ${p} de recoger del cole el ${dayStr}?`,
     )
     if (!ok) return
-    days[i].pickUp = { person: null, overridden: true }
+    days[i].pickUp = { person: null, theoHouse, overridden: true }
     scheduleSave(`Guardado · ${dayStr}: sin asignar (recoger)`)
   } else {
     const msg = current
@@ -938,7 +1014,7 @@ async function selectPickupPerson(weekKey: string, i: number, p: Person) {
       : `¿Asignar a ${p} para recoger del cole el ${dayStr}?`
     const ok = await askConfirm('Confirmar cambio', msg)
     if (!ok) return
-    days[i].pickUp = { person: p, overridden: true }
+    days[i].pickUp = { person: p, theoHouse, overridden: true }
     scheduleSave(`Guardado · ${dayStr}: ${p} recoge`)
   }
 }
